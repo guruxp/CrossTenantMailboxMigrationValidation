@@ -2,7 +2,9 @@
 
 ## DESCRIPTION
 
-This script is intended to be used for:
+This script offers the ability to validate users and org settings related to the Cross-tenant mailbox migration before creating a migration batch and have a better experience.
+
+It will help you on:
 - Making sure the source mailbox object ExchangeGuid attribute value matches the one from the target MailUser object
 - Making sure the source mailbox object ArchiveGuid attribute (if there's an Archive enabled) value matches the one from the target MailUser object
 - Making sure the source mailbox object LegacyExchangeDN attribute value is present on the target MailUser object as an X500 proxyAddress
