@@ -5,6 +5,7 @@
 .DESCRIPTION
 
     This script is intended to be used for:
+    - Making sure the source mailbox object is a member of the Mail-Enabled Security Group defined on the MailboxMovePublishedScopes of the source organization relationship
     - Making sure the source mailbox object ExchangeGuid attribute value matches the one from the target MailUser object
     - Making sure the source mailbox object ArchiveGuid attribute (if there's an Archive enabled) value matches the one from the target MailUser object
     - Making sure the source mailbox object LegacyExchangeDN attribute value is present on the target MailUser object as an X500 proxyAddress
@@ -14,7 +15,7 @@
     - Checking if there's an AAD app as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-target-destination-tenant-by-creating-the-migration-application-and-secret 
     - Checking if the target tenant has an Organization Relationship as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-target-tenant-by-creating-the-exchange-online-migration-endpoint-and-organization-relationship
     - Checking if the target tenant has a Migration Endpoint as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-target-tenant-by-creating-the-exchange-online-migration-endpoint-and-organization-relationship
-    - Checking if the source tenant has an Organization Relationship as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-source-current-mailbox-location-tenant-by-accepting-the-migration-application-and-configuring-the-organization-relationship
+    - Checking if the source tenant has an Organization Relationship as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-source-current-mailbox-location-tenant-by-accepting-the-migration-application-and-configuring-the-organization-relationship including a Mail-Enabled security group defined on the MailboxMovePublishedScopes property.
 
     The script will prompt you to connect to your source and target tenants for EXO and AAD (only if you specify the "CheckOrgs" parameter) 
     You can decide to run the checks for the source mailbox and target mailuser (individually or by providing a CSV file), or for the organization settings described above.
@@ -100,6 +101,16 @@ function CheckObjects {
     Write-Host "Informational: Loading TARGET object"$TargetIdentity  -ForegroundColor Yellow
     $TargetObject = Get-TargetMailUser $TargetIdentity
 
+    #Verify if SOURCE mailbox is part of the Mail-Enabled Security Group defined on the SOURCE organization relationship
+    Write-Host "Informational: Checking if the SOURCE object is a member of the SOURCE organization relationship Mail-Enabled Security Group defined on the MailboxMovePublishedScopes"  -ForegroundColor Yellow
+    $SourceTenantOrgRelationship = Get-SourceOrganizationRelationship | ? { ($_.MailboxMoveCapability -eq "RemoteOutbound") -and ($_.OauthApplicationId -ne $null) }
+    If ((Get-SourceDistributionGroupMember $SourceTenantOrgRelationship.MailboxMovePublishedScopes[0]).Name -contains $SourceObject.Name) {
+        Write-Host ">> SOURCE mailbox is within the MailboxMovePublishedScopes" -ForegroundColor Green
+    }
+    else {
+        Write-Host ">> Error: SOURCE mailbox is NOT within the MailboxMovePublishedScopes" -ForegroundColor Red
+    }
+
     #Verify ExchangeGuid on target object matches with source object and provide the option to set it in case it doesn't
     If (($SourceObject.ExchangeGuid -eq $null) -or ($TargetObject.ExchangeGuid -eq $null)) {
         Exit
@@ -146,7 +157,7 @@ function CheckObjects {
     }
 
     #Verify LagacyExchangeDN is present on target object as an X500 proxy address and provide the option to add it in case it isn't
-    Write-Host "Informational: Checking if LegaxyExchangeDN from SOURCE object is part of EmailAddresses on TARGET object"  -ForegroundColor Yellow
+    Write-Host "Informational: Checking if LegacyExchangeDN from SOURCE object is part of EmailAddresses on TARGET object"  -ForegroundColor Yellow
     If ($TargetObject.EmailAddresses -eq $null) {
         Exit
     }
@@ -282,11 +293,9 @@ function CheckOrgs {
             }
             else {
                 Write-Host "ERROR: Organization relationship on SOURCE tenant DomainNames is not pointing to TargetTenantId" -ForegroundColor Red
-                #    $SourceOrgRelationshipDomainNames = Read-Host "Would you like to set it correctly? (Y/N)"
-                #    If ($SourceOrgRelationshipDomainNames.ToLower() -eq "y") {
-                #        Write-Host "Informational: Setting SOURCE Organization Relationship DomainNames to:"$TargetTenantId -ForegroundColor Yellow
-                #        Set-OganizationRelationShip $SourceTenantOrgRelationship.Identity -DomainNames $TargetTenantId
-                #   }
+            }
+            if ($SourceTenantOrgRelationship.MailboxMovePublishedScopes -eq $null) {
+                Write-Host "ERROR: Organization relationship on SOURCE tenant does not have a Mail-Enabled security group defined under the MailboxMovePublishedScopes property" -ForegroundColor Red
             }
         }
                 
