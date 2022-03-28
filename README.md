@@ -16,6 +16,7 @@ It will help you on:
 - Checking if the target tenant has an Organization Relationship as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-target-tenant-by-creating-the-exchange-online-migration-endpoint-and-organization-relationship
 - Checking if the target tenant has a Migration Endpoint as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-target-tenant-by-creating-the-exchange-online-migration-endpoint-and-organization-relationship
 - Checking if the source tenant has an Organization Relationship as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-source-current-mailbox-location-tenant-by-accepting-the-migration-application-and-configuring-the-organization-relationship including a Mail-Enabled security group defined on the MailboxMovePublishedScopes property.
+- Gather all the necessary information for troubleshooting and send it to Microsoft Support if needed
 
 The script will prompt you to connect to your source and target tenants for EXO and AAD (only if you specify the "CheckOrgs" parameter) 
 You can decide to run the checks for the source mailbox and target mailuser (individually or by providing a CSV file), or for the organization settings described above.
@@ -41,7 +42,10 @@ An example of the CSV file content would be:
 
 ### CheckOrgs
 This will allow you to perform the checks for the source and target organizations. More specifically the organization relationship on both tenants, the migration endpoint on target tenant and the existence of the AAD application needed.
-    
+
+### SDP
+This will collect all the relevant information for troubleshooting from both tenants and be able to send it to Microsoft Support in case of needed.  
+
 
 ## EXAMPLES
 ### EXAMPLE 1
@@ -63,18 +67,25 @@ This will establish 2 EXO remote powershell sessions (one to the source tenant a
     
 This will prompt you for the soureTenantId and TargetTenantId, establish 3 remote powershell sessions (one to the source EXO tenant, one to the target EXO tenant and another one to AAD target tenant), and will validate the migration endpoint on the target tenant, AAD applicationId on target tenant and the Orgnization relationship on both tenants.
 
+### EXAMPLE 4
+
+   
+    .\CrossTenantMailboxMigrationValidation.ps1 -SDP
+    
+This will prompt you for the soureTenantId and TargetTenantId, establish 3 remote powershell sessions (one to the source EXO tenant, one to the target EXO tenant and another one to AAD target tenant), and will collect all the relevant information (config-wise) so it can be used for troubleshooting and send it to Microsoft Support if needed.
+
 
 ## NOTES
 
 |     |     |
 | --- | --- |
 | File Name | CrossTenantMailboxMigrationValidation.ps1 |
-| Version | 1.0 | 
+| Version | 2.0 | 
 | Author | Alberto Pascual Montoya (Microsoft) |  
 | Contributors | Ignacio Serrano Acero (Microsoft) |  
 | Requires | Exchange Online PowerShell V2 Module, AzureAD Module |  
 | Created | 2022-03-17 |  
-| Updated | 2022-03-17 |
+| Updated | 2022-03-28 |
 |     |     |
 
 ## Disclaimer
