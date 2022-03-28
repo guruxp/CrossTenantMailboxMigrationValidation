@@ -16,6 +16,7 @@
     - Checking if the target tenant has an Organization Relationship as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-target-tenant-by-creating-the-exchange-online-migration-endpoint-and-organization-relationship
     - Checking if the target tenant has a Migration Endpoint as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-target-tenant-by-creating-the-exchange-online-migration-endpoint-and-organization-relationship
     - Checking if the source tenant has an Organization Relationship as described on https://docs.microsoft.com/en-us/microsoft-365/enterprise/cross-tenant-mailbox-migration?view=o365-worldwide#prepare-the-source-current-mailbox-location-tenant-by-accepting-the-migration-application-and-configuring-the-organization-relationship including a Mail-Enabled security group defined on the MailboxMovePublishedScopes property.
+    - Gather all the necessary information for troubleshooting and send it to Microsoft Support if needed
 
     The script will prompt you to connect to your source and target tenants for EXO and AAD (only if you specify the "CheckOrgs" parameter) 
     You can decide to run the checks for the source mailbox and target mailuser (individually or by providing a CSV file), or for the organization settings described above.
@@ -40,6 +41,8 @@
 .PARAMETER CheckOrgs
         This will allow you to perform the checks for the source and target organizations. More specifically the organization relationship on both tenants, the migration endpoint on target tenant and the existence of the AAD application needed.
     
+.PARAMETER SDP
+        This will collect all the relevant information for troubleshooting from both tenants and be able to send it to Microsoft Support in case of needed.
 
 .EXAMPLE
 
@@ -59,15 +62,20 @@
     
         This will prompt you for the soureTenantId and TargetTenantId, establish 3 remote powershell sessions (one to the source EXO tenant, one to the target EXO tenant and another one to AAD target tenant), and will validate the migration endpoint on the target tenant, AAD applicationId on target tenant and the Orgnization relationship on both tenants.
 
+.EXAMPLE    
+    
+        .\CrossTenantMailboxMigrationValidation.ps1 -SDP
+    
+        This will prompt you for the soureTenantId and TargetTenantId, establish 3 remote powershell sessions (one to the source EXO tenant, one to the target EXO tenant and another one to AAD target tenant), and will collect all the relevant information (config-wise) so it can be used for troubleshooting and send it to Microsoft Support if needed.
 
 .NOTES
     File Name         : CrossTenantMailboxMigrationValidation.ps1
-	Version           : 1.0
+	Version           : 2.0
     Author            : Alberto Pascual Montoya (Microsoft)
 	Contributors      : Ignacio Serrano Acero (Microsoft)
 	Requires          : Exchange Online PowerShell V2 Module, AzureAD Module
 	Created           : 2022-03-17
-	Updated           : 2022-03-17
+	Updated           : 2022-03-28
 	Disclaimer        : THIS CODE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. MICROSOFT FURTHER DISCLAIMS ALL IMPLIED WARRANTIES INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF MERCHANTABILITY OR OF FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK ARISING OUT OF THE USE OR PERFORMANCE OF THE SAMPLES REMAINS WITH YOU. IN NO EVENT SHALL MICROSOFT OR ITS SUPPLIERS BE LIABLE FOR ANY DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS INFORMATION, OR OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR INABILITY TO USE THE SAMPLES, EVEN IF MICROSOFT HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. BECAUSE SOME STATES DO NOT ALLOW THE EXCLUSION OR LIMITATION OF LIABILITY FOR CONSEQUENTIAL OR INCIDENTAL DAMAGES, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.
 #>
 
@@ -77,7 +85,9 @@ param (
     [Parameter(Mandatory=$False, ParameterSetName="ObjectsValidation", HelpMessage="Path pointing to the CSV containing the identities to validate. CheckObjects parameter needs also to be specified")]
     [System.String[]]$CSV, 
     [Parameter(Mandatory=$True, ParameterSetName="OrgsValidation", HelpMessage="Validate source Mailbox and Target MailUser objects. If used alone you will be prompted to introduce the identities you want to validate")]
-    [System.Management.Automation.SwitchParameter]$CheckOrgs
+    [System.Management.Automation.SwitchParameter]$CheckOrgs,
+    [Parameter(Mandatory=$True, ParameterSetName="SDP", HelpMessage="Collect relevant data for troubleshooting purposes and send it to Microsoft Support if needed")]
+    [System.Management.Automation.SwitchParameter]$SDP
 )
 
 $wsh = New-Object -ComObject Wscript.Shell
@@ -231,12 +241,13 @@ function CheckObjects {
     }
 }
 
-function CheckOrgs {
-
+function ConnectToTargetTenantAAD{
     #Connect to TargetTenant (AzureAD)
     Write-Host "Informational: Connecting to AAD on TARGET tenant"  -ForegroundColor Yellow
     $wsh.Popup("You're about to connect to target tenant (AAD), please provide the TARGET tenant admin credentials", 0, "TARGET tenant")
     Connect-AzureAD
+}
+function CheckOrgs {
 
     #Check if there's an AAD EXO app as expected and load it onto a variable
     Write-Host "Informational: Checking if there's already an AAD Application on TARGET tenant that meets the criteria"  -ForegroundColor Yellow
@@ -308,6 +319,45 @@ function CheckOrgs {
     }
 }
 
+function CollectData {
+    #Create the folders based on date and time to store the files
+    $InputPath = Read-Host "Please specify an existing path to store the collected data (don't include the ending '\') "
+    $OutputPath = $InputPath+'\'+((Get-Date).ToString('ddMMyyHHMM'))
+    New-Item -ItemType Directory -Path $OutputPath
+    
+    #Collect the Exchange Online data and export it to an XML file
+    Write-Host "Informational: Saving SOURCE tenant id to text file"  -ForegroundColor Yellow
+    "SourceTenantId: "+$SourceTenantId | Out-File $OutputPath\TenantIds.txt
+    "TargetTenantId: "+$TargetTenantId | Out-File $OutputPath\TenantIds.txt -Append
+    Write-Host "Informational: Exporting the SOURCE tenant organization relationship"  -ForegroundColor Yellow
+    Get-SourceOrganizationRelationship | Export-Clixml $OutputPath\SourceOrgRelationship.xml
+    Write-Host "Informational: Exporting the TARGET tenant migration endpoint"  -ForegroundColor Yellow
+    Get-TargetMigrationEndpoint | Export-Clixml $OutputPath\TargetMigrationEndpoint.xml
+    Write-Host "Informational: Exporting the TARGET tenant organization relationship"  -ForegroundColor Yellow
+    Get-TargetOrganizationRelationship | Export-Clixml $OutputPath\TargetOrgRelationship.xml
+    Write-Host "Informational: Exporting the TARGET tenant accepted domains"  -ForegroundColor Yellow
+    Get-TargetAcceptedDomain | Export-Clixml $OutputPath\TargetAcceptedDomains.xml
+    Write-Host "Informational: Exporting the TARGET tenant Azure AD applications" - -ForegroundColor Yellow
+    Get-AzureADApplication | Export-Clixml $OutputPath\TargetAADApps.xml
+
+    #Compress folder contents into a zip file
+    Write-Host "Informational: Data has been exported. Compressing it into a ZIP file"  -ForegroundColor Yellow
+    if ((Get-ChildItem $OutputPath).count -gt 0){
+        try {
+            Compress-Archive -Path $OutputPath\*.XML -DestinationPath $InputPath\CTMMCollectedData.zip 
+            Compress-Archive -Path $OutputPath\TenantIds.txt -DestinationPath $InputPath\CTMMCollectedData.zip -Update
+            Write-Host "Informational: ZIP file has been generated with a total of"(Get-ChildItem $OutputPath).count"files, and can be found at"$OutputPath\CTMMCollectedData.zip" so it can be sent to Microsoft Support if needed, however you can still access the raw data at "$OutputPath  -ForegroundColor Yellow
+        }
+        catch {
+            Write-Host "ERROR: There was an issue trying to compress the exported data" -ForegroundColor Red
+        }
+    }
+    else{
+        Write-Host "ERROR: No data has been detected at"$OutputPath", so there's nothing to compress" -ForegroundColor Red
+    }
+
+}
+
 if ($CheckObjects) {
     if ($CSV) {
         $Objects = Import-Csv $CSV
@@ -332,6 +382,14 @@ if ($CheckOrgs) {
     $SourceTenantId = Read-Host "Please specify the SOURCE TenantId: "
     $TargetTenantId = Read-Host "Please specify the TARGET TenantId: "
     ConnectToEXOTenants
+    ConnectToTargetTenantAAD
     CheckOrgs
 }
 
+if ($SDP) {
+    $SourceTenantId = Read-Host "Please specify the SOURCE TenantId: "
+    $TargetTenantId = Read-Host "Please specify the TARGET TenantId: "
+    ConnectToEXOTenants
+    ConnectToTargetTenantAAD
+    CollectData
+}
