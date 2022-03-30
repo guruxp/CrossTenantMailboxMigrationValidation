@@ -80,12 +80,12 @@ This will prompt you for the soureTenantId and TargetTenantId, establish 3 remot
 |     |     |
 | --- | --- |
 | File Name | CrossTenantMailboxMigrationValidation.ps1 |
-| Version | 2.0 | 
+| Version | 2.1 | 
 | Author | Alberto Pascual Montoya (Microsoft) |  
 | Contributors | Ignacio Serrano Acero (Microsoft) |  
 | Requires | Exchange Online PowerShell V2 Module, AzureAD Module |  
 | Created | 2022-03-17 |  
-| Updated | 2022-03-28 |
+| Updated | 2022-03-30 |
 |     |     |
 
 ## Disclaimer
