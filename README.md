@@ -8,6 +8,8 @@ It will help you on:
 - Making sure the source mailbox object is a member of the Mail-Enabled Security Group defined on the MailboxMovePublishedScopes of the source organization relationship
 - Making sure the source mailbox object ExchangeGuid attribute value matches the one from the target MailUser object
 - Making sure the source mailbox object ArchiveGuid attribute (if there's an Archive enabled) value matches the one from the target MailUser object
+- Making sure the source mailbox object has no auxArchives
+- Making sure the source mailbox object TotalDeletedItemsSize is not bigger than Target MailUser recoverable items size
 - Making sure the source mailbox object LegacyExchangeDN attribute value is present on the target MailUser object as an X500 proxyAddress
 - Making sure the target MailUser object PrimarySMTPAddress attribute value is part of the target tenant accepted domains and give you the option to set it to be like the UPN if not true
 - Making sure the target MailUser object EmailAddresses are all part of the target tenant accepted domains and give you the option to remove them if any doesn't belong to are found 
@@ -80,12 +82,12 @@ This will prompt you for the soureTenantId and TargetTenantId, establish 3 remot
 |     |     |
 | --- | --- |
 | File Name | CrossTenantMailboxMigrationValidation.ps1 |
-| Version | 2.1 | 
+| Version | 2.2 | 
 | Author | Alberto Pascual Montoya (Microsoft) |  
 | Contributors | Ignacio Serrano Acero (Microsoft) |  
 | Requires | Exchange Online PowerShell V2 Module, AzureAD Module |  
 | Created | 2022-03-17 |  
-| Updated | 2022-03-30 |
+| Updated | 2022-04-01 |
 |     |     |
 
 ## Disclaimer
