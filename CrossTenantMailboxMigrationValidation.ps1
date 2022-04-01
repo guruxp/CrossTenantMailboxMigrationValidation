@@ -8,6 +8,8 @@
     - Making sure the source mailbox object is a member of the Mail-Enabled Security Group defined on the MailboxMovePublishedScopes of the source organization relationship
     - Making sure the source mailbox object ExchangeGuid attribute value matches the one from the target MailUser object
     - Making sure the source mailbox object ArchiveGuid attribute (if there's an Archive enabled) value matches the one from the target MailUser object
+    - Making sure the source mailbox object has no auxArchives
+    - Making sure the source mailbox object TotalDeletedItemsSize is not bigger than Target MailUser recoverable items size
     - Making sure the source mailbox object LegacyExchangeDN attribute value is present on the target MailUser object as an X500 proxyAddress
     - Making sure the target MailUser object PrimarySMTPAddress attribute value is part of the target tenant accepted domains and give you the option to set it to be like the UPN if not true
     - Making sure the target MailUser object EmailAddresses are all part of the target tenant accepted domains and give you the option to remove them if any doesn't belong to are found 
@@ -69,13 +71,13 @@
         This will prompt you for the soureTenantId and TargetTenantId, establish 3 remote powershell sessions (one to the source EXO tenant, one to the target EXO tenant and another one to AAD target tenant), and will collect all the relevant information (config-wise) so it can be used for troubleshooting and send it to Microsoft Support if needed.
 
 .NOTES
-    File Name         : CrossTenantMailboxMigrationValidation.ps1
-	Version           : 2.1
-    Author            : Alberto Pascual Montoya (Microsoft)
+    	File Name         : CrossTenantMailboxMigrationValidation.ps1
+	Version           : 2.2
+    	Author            : Alberto Pascual Montoya (Microsoft)
 	Contributors      : Ignacio Serrano Acero (Microsoft)
 	Requires          : Exchange Online PowerShell V2 Module, AzureAD Module
 	Created           : 2022-03-17
-	Updated           : 2022-03-30
+	Updated           : 2022-04-01
 	Disclaimer        : THIS CODE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. MICROSOFT FURTHER DISCLAIMS ALL IMPLIED WARRANTIES INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF MERCHANTABILITY OR OF FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK ARISING OUT OF THE USE OR PERFORMANCE OF THE SAMPLES REMAINS WITH YOU. IN NO EVENT SHALL MICROSOFT OR ITS SUPPLIERS BE LIABLE FOR ANY DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS INFORMATION, OR OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR INABILITY TO USE THE SAMPLES, EVEN IF MICROSOFT HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. BECAUSE SOME STATES DO NOT ALLOW THE EXCLUSION OR LIMITATION OF LIABILITY FOR CONSEQUENTIAL OR INCIDENTAL DAMAGES, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.
 #>
 
