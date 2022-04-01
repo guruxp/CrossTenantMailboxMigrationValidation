@@ -115,138 +115,180 @@ function CheckObjects {
     if ($SourceObject) {
         #Since SourceObject is valid, validate if TargetObject is present
         if ($TargetObject) {
-            #Verify if SOURCE mailbox is part of the Mail-Enabled Security Group defined on the SOURCE organization relationship
-            Write-Verbose -Message "Informational: Checking if the SOURCE object is a member of the SOURCE organization relationship Mail-Enabled Security Group defined on the MailboxMovePublishedScopes"   
-            $SourceTenantOrgRelationship = Get-SourceOrganizationRelationship | ? { ($_.MailboxMoveCapability -eq "RemoteOutbound") -and ($_.OauthApplicationId -ne $null) }
-            if ((Get-SourceDistributionGroupMember $SourceTenantOrgRelationship.MailboxMovePublishedScopes[0]).Name -contains $SourceObject.Name) {
-                Write-Host ">> SOURCE mailbox is within the MailboxMovePublishedScopes" -ForegroundColor Green
-            }
-            else {
-                Write-Host ">> Error: SOURCE mailbox is NOT within the MailboxMovePublishedScopes" -ForegroundColor Red
-            }
-
-            #Verify ExchangeGuid on target object matches with source object and provide the option to set it in case it doesn't
-            If (($SourceObject.ExchangeGuid -eq $null) -or ($TargetObject.ExchangeGuid -eq $null)) {
-                Exit
-            }
-            Write-Verbose -Message "Informational: Checking ExchangeGUID"   
-            If ($SourceObject.ExchangeGuid -eq $TargetObject.ExchangeGuid) {
-                Write-Host ">> ExchangeGuid match ok" -ForegroundColor Green
+            #Check if source mailbox has aux archives and if so throw error, otherwise continue with the rest of validations
+            Write-Verbose -Message "Checking if SOURCE mailbox has any aux-archives present"
+            if ($SourceObject.MailboxLocations -like '*auxArchive*') {
+                Write-Host ">> Error: The SOURCE malbox has an auxArchive and as of now this object can't be migrated"
+                exit
             }
             Else {
-                Write-Host ">> Error: ExchangeGuid mismatch. Expected Vaue:" $SourceObject.ExchangeGuid ",Current value:" $TargetObject.ExchangeGuid -ForegroundColor Red
-                $ExchangeGuidSetOption = Read-Host "Would you like to set it? (Y/N)"
-                If ($ExchangeGuidSetOption.ToLower() -eq "y") {
-                    Write-Verbose -Message "Informational: Setting correct ExchangeGUID on TARGET object"   
-                    Set-TargetMailUser $TargetIdentity -ExchangeGuid $SourceObject.ExchangeGuid
-                    #Reload TARGET object into variable as it has been changed
-                    $TargetObject = Get-TargetMailUser $TargetIdentity
-                }
-            }
+                Write-Verbose -Message "No aux archives are present on SOURCE malbox"
 
-            #Verify if Archive is present on source and if it is, verify ArchiveGuid on target object matches with source object and provide the option to set it in case it doesn't
-            Write-Verbose -Message "Informational: Checking if there's an Archive enabled on SOURCE object"   
-            If ($SourceObject.ArchiveGUID -eq $null) {
-                if ($TargetObject.ArchiveGUID -ne $null){
-                    Write-Host ">> Error: The TARGET MailUser"$TargetObject.Name"has an archive present while source doesn't"
+                #Verify if SOURCE mailbox is part of the Mail-Enabled Security Group defined on the SOURCE organization relationship
+                Write-Verbose -Message "Informational: Checking if the SOURCE mailbox is a member of the SOURCE organization relationship Mail-Enabled Security Group defined on the MailboxMovePublishedScopes"   
+                $SourceTenantOrgRelationship = Get-SourceOrganizationRelationship | ? { ($_.MailboxMoveCapability -eq "RemoteOutbound") -and ($_.OauthApplicationId -ne $null) }
+                if ((Get-SourceDistributionGroupMember $SourceTenantOrgRelationship.MailboxMovePublishedScopes[0]).Name -contains $SourceObject.Name) {
+                    Write-Host ">> SOURCE mailbox is within the MailboxMovePublishedScopes" -ForegroundColor Green
                 }
-                Exit
-            }
-            If ($SourceObject.ArchiveGuid -ne "00000000-0000-0000-0000-000000000000") {
-                Write-Verbose -Message "Informational: Archive is enabled on SOURCE object"   
-                Write-Verbose -Message "Informational: Checking ArchiveGUID"   
-                If ($SourceObject.ArchiveGuid -eq $TargetObject.ArchiveGuid) {
-                    Write-Host ">> ArchiveGuid match ok" -ForegroundColor Green
-                } 
+                else {
+                    Write-Host ">> Error: SOURCE mailbox is NOT within the MailboxMovePublishedScopes. The migration will fail if you don't correct this" -ForegroundColor Red
+                }
+
+                #Check the recoverableItems quota on TARGET MailUser and compare it with the SOURCE mailbox occupied quota
+                Write-Verbose -Message "Checking if the current dumpster size on SOURCE mailbox is bigger than the TARGET MailUser recoverable items quota"
+                if (((Get-SourceMailboxStatistics $SourceIdentity).TotalDeletedItemSize -replace '^.+\((.+\))','$1' -replace '\D' -as [int]) -gt ([int64]($TargetObject.RecoverableItemsQuota -replace '^.+\((.+\))','$1' -replace '\D'))){
+                    Write-Host ">> Error: Dumpster size on SOURCE mailbox is bigger than TARGET MailUser RecoverableItemsQuota. This will cause the migration to fail"
+                }
+
+                #Verify ExchangeGuid on target object matches with source object and provide the option to set it in case it doesn't
+                If (($SourceObject.ExchangeGuid -eq $null) -or ($TargetObject.ExchangeGuid -eq $null)) {
+                    Exit
+                }
+                Write-Verbose -Message "Informational: Checking ExchangeGUID"   
+                If ($SourceObject.ExchangeGuid -eq $TargetObject.ExchangeGuid) {
+                    Write-Host ">> ExchangeGuid match ok" -ForegroundColor Green
+                }
                 Else {
-                    Write-Host ">> Error: ArchiveGuid mismatch. Expected Value: "$SourceObject.ArchiveGuid", Current value: " $TargetObject.ArchiveGuid -ForegroundColor Red
-                    $ArchiveGuidSetOption = Read-Host "Would you like to set it? (Y/N)"
-                    If ($ArchiveGuidSetOption.ToLower() -eq "y") {
-                        Write-Verbose -Message "Informational: Setting correct ArchiveGUID on TARGET object"   
-                        Set-TargetMailUser $TargetIdentity -ArchiveGuid $SourceObject.ArchiveGuid
+                    Write-Host ">> Error: ExchangeGuid mismatch. Expected Vaue:" $SourceObject.ExchangeGuid ",Current value:" $TargetObject.ExchangeGuid -ForegroundColor Red
+                    $ExchangeGuidSetOption = Read-Host "Would you like to set it? (Y/N)"
+                    If ($ExchangeGuidSetOption.ToLower() -eq "y") {
+                        Write-Verbose -Message "Informational: Setting correct ExchangeGUID on TARGET object"   
+                        Set-TargetMailUser $TargetIdentity -ExchangeGuid $SourceObject.ExchangeGuid
                         #Reload TARGET object into variable as it has been changed
                         $TargetObject = Get-TargetMailUser $TargetIdentity
                     }
                 }
-            }
-            Else {
-                Write-Verbose -Message "Informational: Source object has no Archive enabled"  
-            }
 
-            #Verify LagacyExchangeDN is present on target object as an X500 proxy address and provide the option to add it in case it isn't
-            Write-Verbose -Message "Informational: Checking if LegacyExchangeDN from SOURCE object is part of EmailAddresses on TARGET object"   
-            If ($TargetObject.EmailAddresses -eq $null) {
-                Exit
-            }
-            If ($TargetObject.EmailAddresses -contains "X500:" + $SourceObject.LegacyExchangeDN) {
-                Write-Host ">> LegacyExchangeDN found as an X500 ProxyAddress on Target Object." -ForegroundColor Green
-            }
-            Else {
-                Write-Host ">> Error: LegacyExchangeDN not found as an X500 ProxyAddress on Target Object. LegacyExchangeDN expected on target object:" $SourceObject.LegacyExchangeDN -ForegroundColor Red
-                $LegDNAddOption = Read-Host "Would you like to add it? (Y/N)"
-                If ($LegDNAddOption.ToLower() -eq "y") {
-                    Write-Verbose -Message "Informational: Adding LegacyExchangeDN as a proxyAddress on TARGET object"   
-                    Set-TargetMailUser $TargetIdentity -EmailAddresses @{Add = "X500:" + $SourceObject.LegacyExchangeDN }
-                    #Reload TARGET object into variable as it has been changed
-                    $TargetObject = Get-TargetMailUser $TargetIdentity  
+                #Verify if Archive is present on source and if it is, verify ArchiveGuid on target object matches with source object and provide the option to set it in case it doesn't
+                Write-Verbose -Message "Informational: Checking if there's an Archive enabled on SOURCE object"   
+                If ($SourceObject.ArchiveGUID -eq $null) {
+                    if ($TargetObject.ArchiveGUID -ne $null) {
+                        Write-Host ">> Error: The TARGET MailUser"$TargetObject.Name"has an archive present while source doesn't"
+                    }
+                    Exit
                 }
-            }
-
-            #Check if the primarySMTPAddress of the target MailUser is part of the accepted domains on the target tenant and if any of the email addresses of the target MailUser doesn't belong to the target accepted domains
-            Write-Verbose -Message "Informational: Loading TARGET accepted domains"   
-            $TargetTenantAcceptedDomains = Get-TargetAcceptedDomain
-            #PrimarySMTP
-            Write-Verbose -Message "Informational: Checking if the PrimarySTMPAddress of TARGET belongs to a TARGET accepted domain"   
-            if ($TargetTenantAcceptedDomains.DomainName -notcontains $TargetObject.PrimarySmtpAddress.Split('@')[1]) {
-                Write-Host ">> Error: The Primary SMTP address"$TargetObject.PrimarySmtpAddress"of the MailUser does not belong to an accepted domain on the target tenant, would you like to set it to"$TargetObject.UserPrincipalName"(Y/N): " -ForegroundColor Red -NoNewline
-                $PrimarySMTPAddressSetOption = Read-Host
-                if ($PrimarySMTPAddressSetOption.ToLower() -eq "y") {
-                    Write-Verbose -Message "Informational: Setting the UserPrincipalName of TARGET object as the PrimarySMTPAddress"   
-                    Set-TargetMailUser $TargetIdentity -PrimarySmtpAddress $TargetObject.UserPrincipalName
-                    #Reload TARGET object into variable as it has been changed
-                    $TargetObject = Get-TargetMailUser $TargetIdentity
-                }
-            }
-            Else {
-                Write-Host ">> Target MailUser PrimarySMTPAddress is part of target accepted domains" -ForegroundColor Green
-            }
-
-            #EMailAddresses
-            Write-Verbose -Message "Informational: Checking for EmailAddresses on TARGET object that are not on the TARGET accepted domains list"   
-            foreach ($Address in $TargetObject.EmailAddresses) {
-                if ($Address.StartsWith("SMTP:") -or $Address.StartsWith("smtp:")) {
-                    If ($TargetTenantAcceptedDomains.DomainName -notcontains $Address.Split("@")[1]) {
-                        write-host ">> Error:"$Address" is not part of your organization, would you like to remove it? (Y/N): " -ForegroundColor Red -NoNewline
-                        $RemoveAddressOption = Read-Host 
-                        If ($RemoveAddressOption.ToLower() -eq "y") {
-                            Write-Host "Informational: Removing the EmailAddress"$Address" from the TARGET object"   
-                            Set-TargetMailUser $TargetIdentity -EmailAddresses @{Remove = $Address }
+                If ($SourceObject.ArchiveGuid -ne "00000000-0000-0000-0000-000000000000") {
+                    Write-Verbose -Message "Informational: Archive is enabled on SOURCE object"
+                    Write-Verbose -Message "Informational: Checking ArchiveGUID"   
+                    If ($SourceObject.ArchiveGuid -eq $TargetObject.ArchiveGuid) {
+                        Write-Host ">> ArchiveGuid match ok" -ForegroundColor Green
+                    } 
+                    Else {
+                        Write-Host ">> Error: ArchiveGuid mismatch. Expected Value: "$SourceObject.ArchiveGuid", Current value: " $TargetObject.ArchiveGuid -ForegroundColor Red
+                        $ArchiveGuidSetOption = Read-Host "Would you like to set it? (Y/N)"
+                        If ($ArchiveGuidSetOption.ToLower() -eq "y") {
+                            Write-Verbose -Message "Informational: Setting correct ArchiveGUID on TARGET object"   
+                            Set-TargetMailUser $TargetIdentity -ArchiveGuid $SourceObject.ArchiveGuid
                             #Reload TARGET object into variable as it has been changed
-                            $TargetObject = Get-TargetMailUser $TargetIdentity                    
+                            $TargetObject = Get-TargetMailUser $TargetIdentity
                         }
                     }
                 }
+            
                 Else {
-                    Write-Host ">> Target MailUser ProxyAddresses are all part of the target organization" -ForegroundColor Green
+                    Write-Verbose -Message "Informational: Source object has no Archive enabled"  
                 }
-            }
 
-            #Check ExternalEmailAddress on TargetMailUser with primarySMTPAddress from SourceMailbox:
-            Write-Verbose -Message "Informational: Checking if the ExternalEmailAddress on TARGET object points to the PrimarySMTPAddress of the SOURCE object"   
-            if ($TargetObject.ExternalEmailAddress.Split(":")[1] -eq $SourceObject.PrimarySmtpAddress) {
-                Write-Host ">> ExternalEmailAddress of Target MailUser is pointing to PrimarySMTPAddress of Source Mailbox" -ForegroundColor Green
-            }
-            Else {
-                write-host ">> Error: TargetMailUser ExternalEmailAddress value"$TargetObject.ExternalEmailAddress"does not match the PrimarySMTPAddress of the SourceMailbox"$SourceObject.PrimarySmtpAddress", would you like to set it? (Y/N): " -ForegroundColor Red -NoNewline
-                $RemoveAddressOption = Read-Host 
-                If ($RemoveAddressOption.ToLower() -eq "y") {
-                    Write-Host "Informational: Setting the ExternalEmailAddress of SOURCE object to"$SourceObject.PrimarySmtpAddress   
-                    Set-TargetMailUser $TargetIdentity -ExternalEmailAddress $SourceObject.PrimarySmtpAddress
-                    #Reload TARGET object into variable as it has been changed
-                    $TargetObject = Get-TargetMailUser $TargetIdentity            
+                #Verify LegacyExchangeDN is present on target object as an X500 proxy address and provide the option to add it in case it isn't
+                Write-Verbose -Message "Informational: Checking if LegacyExchangeDN from SOURCE object is part of EmailAddresses on TARGET object"   
+                If ($TargetObject.EmailAddresses -eq $null) {
+                    Exit
                 }
-            }
-        }        
+                If ($TargetObject.EmailAddresses -contains "X500:" + $SourceObject.LegacyExchangeDN) {
+                    Write-Host ">> LegacyExchangeDN found as an X500 ProxyAddress on Target Object." -ForegroundColor Green
+                }
+                Else {
+                    Write-Host ">> Error: LegacyExchangeDN not found as an X500 ProxyAddress on Target Object. LegacyExchangeDN expected on target object:" $SourceObject.LegacyExchangeDN -ForegroundColor Red
+                    $LegDNAddOption = Read-Host "Would you like to add it? (Y/N)"
+                    If ($LegDNAddOption.ToLower() -eq "y") {
+                        Write-Verbose -Message "Informational: Adding LegacyExchangeDN as a proxyAddress on TARGET object"   
+                        Set-TargetMailUser $TargetIdentity -EmailAddresses @{Add = "X500:" + $SourceObject.LegacyExchangeDN }
+                        #Reload TARGET object into variable as it has been changed
+                        $TargetObject = Get-TargetMailUser $TargetIdentity  
+                    }
+                }
+
+                #Check if the primarySMTPAddress of the target MailUser is part of the accepted domains on the target tenant and if any of the email addresses of the target MailUser doesn't belong to the target accepted domains
+                Write-Verbose -Message "Informational: Loading TARGET accepted domains"   
+                $TargetTenantAcceptedDomains = Get-TargetAcceptedDomain
+
+                #PrimarySMTP
+                Write-Verbose -Message "Informational: Checking if the PrimarySTMPAddress of TARGET belongs to a TARGET accepted domain"   
+                if ($TargetTenantAcceptedDomains.DomainName -notcontains $TargetObject.PrimarySmtpAddress.Split('@')[1]) {
+                    Write-Host ">> Error: The Primary SMTP address"$TargetObject.PrimarySmtpAddress"of the MailUser does not belong to an accepted domain on the target tenant, would you like to set it to"$TargetObject.UserPrincipalName"(Y/N): " -ForegroundColor Red -NoNewline
+                    $PrimarySMTPAddressSetOption = Read-Host
+                    if ($PrimarySMTPAddressSetOption.ToLower() -eq "y") {
+                        Write-Verbose -Message "Informational: Setting the UserPrincipalName of TARGET object as the PrimarySMTPAddress"   
+                        Set-TargetMailUser $TargetIdentity -PrimarySmtpAddress $TargetObject.UserPrincipalName
+                        #Reload TARGET object into variable as it has been changed
+                        $TargetObject = Get-TargetMailUser $TargetIdentity
+                    }
+                }
+                Else {
+                    Write-Host ">> Target MailUser PrimarySMTPAddress is part of target accepted domains" -ForegroundColor Green
+                }
+
+                #EMailAddresses
+                Write-Verbose -Message "Informational: Checking for EmailAddresses on TARGET object that are not on the TARGET accepted domains list"   
+                foreach ($Address in $TargetObject.EmailAddresses) {
+                    if ($Address.StartsWith("SMTP:") -or $Address.StartsWith("smtp:")) {
+                        If ($TargetTenantAcceptedDomains.DomainName -notcontains $Address.Split("@")[1]) {
+                            write-host ">> Error:"$Address" is not part of your organization, would you like to remove it? (Y/N): " -ForegroundColor Red -NoNewline
+                            $RemoveAddressOption = Read-Host 
+                            If ($RemoveAddressOption.ToLower() -eq "y") {
+                                Write-Host "Informational: Removing the EmailAddress"$Address" from the TARGET object"   
+                                Set-TargetMailUser $TargetIdentity -EmailAddresses @{Remove = $Address }
+                                #Reload TARGET object into variable as it has been changed
+                                $TargetObject = Get-TargetMailUser $TargetIdentity                    
+                            }
+                        }
+                    }
+                    Else {
+                        Write-Host ">> Target MailUser ProxyAddresses are all part of the target organization" -ForegroundColor Green
+                    }
+                }
+
+                #Sync X500 addresses from source mailbox to target mailUser
+                Write-Verbose -Message "Informational: Checking for missing X500 adresses on TARGET that are present on SOURCE mailbox"
+                if ($SourceObject.EmailAddresses -like '*500:*') {
+                    Write-Verbose -Message "SOURCE mailbox contains X500 addresses, checking if they're present on the TARGET MailUser"   
+                    foreach ($Address in ($SourceObject.EmailAddresses | ? { $_ -like '*500:*' })) {
+                        if ($TargetObject.EmailAddresses -notcontains $Address) {
+                            write-host ">> Error:"$Address" is not present on the TARGET MailUser, would you like to add it? (Y/N): " -ForegroundColor Red -NoNewline
+                            $AddX500 = Read-Host 
+                            If ($AddX500.ToLower() -eq "y") {
+                                Write-Host "Informational: Adding the X500 Address"$Address" on the TARGET object"   
+                                Set-TargetMailUser $TargetIdentity -EmailAddresses @{Add = $Address }
+                                #Reload TARGET object into variable as it has been changed
+                                $TargetObject = Get-TargetMailUser $TargetIdentity                    
+                            }
+                        }
+                        Else {
+                            Write-Host ">> Informational: The X500 address from SOURCE object is present on TARGET object" -ForegroundColor Green
+                        }
+                    }
+                }
+                else {
+                    Write-Verbose -Message "Informational: SOURCE mailbox doesn't contain any X500 address"
+                }
+
+                #Check ExternalEmailAddress on TargetMailUser with primarySMTPAddress from SourceMailbox:
+                Write-Verbose -Message "Informational: Checking if the ExternalEmailAddress on TARGET object points to the PrimarySMTPAddress of the SOURCE object"   
+                if ($TargetObject.ExternalEmailAddress.Split(":")[1] -eq $SourceObject.PrimarySmtpAddress) {
+                    Write-Host ">> ExternalEmailAddress of Target MailUser is pointing to PrimarySMTPAddress of Source Mailbox" -ForegroundColor Green
+                }
+                Else {
+                    write-host ">> Error: TargetMailUser ExternalEmailAddress value"$TargetObject.ExternalEmailAddress"does not match the PrimarySMTPAddress of the SourceMailbox"$SourceObject.PrimarySmtpAddress", would you like to set it? (Y/N): " -ForegroundColor Red -NoNewline
+                    $RemoveAddressOption = Read-Host 
+                    If ($RemoveAddressOption.ToLower() -eq "y") {
+                        Write-Host "Informational: Setting the ExternalEmailAddress of SOURCE object to"$SourceObject.PrimarySmtpAddress   
+                        Set-TargetMailUser $TargetIdentity -ExternalEmailAddress $SourceObject.PrimarySmtpAddress
+                        #Reload TARGET object into variable as it has been changed
+                        $TargetObject = Get-TargetMailUser $TargetIdentity            
+                    }
+                }
+            } 
+        }       
     
         else {
             Write-Host ">> Error:'"$TargetIdentity "' wasn't found on TARGET tenant" -ForegroundColor Red
@@ -342,9 +384,7 @@ function CheckOrgs {
 
 function KillSessions {
     #Check if there's any existing session opened for EXO and remove it so it doesn't remains open
-    Get-Pssession | ? { $_.ComputerName -eq 'outlook.office365.com' } | Remove-PSSession
-    #Disconnect any opened AAD sessions
-    Disconnect-AzureAD -ErrorAction SilentlyContinue
+    Get-Pssession | ? { $_.ComputerName -eq 'outlook.office365.com' } | Remove-PSSession    
 }
 
 function CollectData {
