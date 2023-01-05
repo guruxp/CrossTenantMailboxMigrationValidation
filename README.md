@@ -1,3 +1,9 @@
+# :warning: **IMPORTANT**: This script is no longer mantained here, and has been moved to the [Microsoft CSS-Exchange official repository](https://microsoft.github.io/CSS-Exchange/) direct link to this script: https://aka.ms/CrossTenantMailboxMigrationValidationScript
+
+#
+#
+#
+
 # CrossTenantMailboxMigrationValidation
 
 ## DESCRIPTION
